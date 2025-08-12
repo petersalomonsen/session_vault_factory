@@ -1,6 +1,18 @@
-# session_vault_factory
+# Session Vault Factory
 
-cargo-near-new-project-description
+A factory contract for deploying and managing session_vault vesting contracts on NEAR Protocol. This project addresses [neardevhub-treasury-dashboard#655](https://github.com/NEAR-DevHub/neardevhub-treasury-dashboard/issues/655).
+
+## Overview
+
+The Session Vault Factory enables automated detection and tracking of locked tokens in NEAR treasuries by providing a centralized factory for deploying session_vault contracts. This solves the visibility problem where treasuries cannot automatically detect locked tokens without a central repository of vesting contract instances.
+
+## Features
+
+- **Factory Pattern**: Deploy new session_vault contract instances through a single factory
+- **Instance Tracking**: Maintain a registry of all deployed session_vault contracts
+- **Pagination Support**: Efficiently list and query deployed instances with pagination
+- **Code Hash Deployment**: Uses global contract deployment by code hash for consistency
+- **Treasury Integration**: Enables NEAR treasuries to automatically detect and display locked fungible tokens
 
 ## How to Build Locally?
 
