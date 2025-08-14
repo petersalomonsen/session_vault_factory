@@ -45,7 +45,7 @@ async fn test_factory_deploys_global_contract() -> Result<(), Box<dyn std::error
         .call("new")
         .args_json(json!({
             "owner_id": factory.id(),
-            "vault_code_hash": code_hash.to_string()
+            "session_vault_code_hash": code_hash.to_string()
         }))
         .transact()
         .await?;
@@ -54,20 +54,11 @@ async fn test_factory_deploys_global_contract() -> Result<(), Box<dyn std::error
     
     // Test deploying a vault through the factory
     let user_account = sandbox.dev_create_account().await?;
-    let token_account = sandbox.dev_create_account().await?;
     
     let deploy_result = user_account
-        .call(factory.id(), "deploy_vault")
+        .call(factory.id(), "create_instance")
         .args_json(json!({
-            "vault_id": "test-vault",
-            "token_id": token_account.id(),
-            "beneficiary": user_account.id(),
-            "lockup_schedule": {
-                "start_timestamp": 1000000000,
-                "cliff_timestamp": null,
-                "end_timestamp": 2000000000,
-                "release_schedule": "Linear"
-            }
+            "name": "test-vault"
         }))
         .deposit(NearToken::from_near(5))
         .transact()
@@ -76,16 +67,16 @@ async fn test_factory_deploys_global_contract() -> Result<(), Box<dyn std::error
     assert!(deploy_result.is_success(), "Vault deployment failed: {:#?}", deploy_result);
     
     // Verify the vault was registered
-    let vaults = factory
-        .view("get_vaults")
+    let instances = factory
+        .view("get_instances")
         .args_json(json!({
             "from_index": 0,
             "limit": 10
         }))
         .await?;
     
-    let vaults_list: Vec<serde_json::Value> = vaults.json()?;
-    assert_eq!(vaults_list.len(), 1, "Expected 1 vault to be registered");
+    let instances_list: Vec<(String, String)> = instances.json()?;
+    assert_eq!(instances_list.len(), 1, "Expected 1 instance to be registered");
     
     Ok(())
 }
@@ -107,28 +98,19 @@ async fn test_factory_pagination() -> Result<(), Box<dyn std::error::Error>> {
         .call("new")
         .args_json(json!({
             "owner_id": factory.id(),
-            "vault_code_hash": code_hash.to_string()
+            "session_vault_code_hash": code_hash.to_string()
         }))
         .transact()
         .await?;
     
     // Deploy multiple vaults
     let user_account = sandbox.dev_create_account().await?;
-    let token_account = sandbox.dev_create_account().await?;
     
     for i in 0..5 {
         let deploy_result = user_account
-            .call(factory.id(), "deploy_vault")
+            .call(factory.id(), "create_instance")
             .args_json(json!({
-                "vault_id": format!("vault-{}", i),
-                "token_id": token_account.id(),
-                "beneficiary": user_account.id(),
-                "lockup_schedule": {
-                    "start_timestamp": 1000000000,
-                    "cliff_timestamp": null,
-                    "end_timestamp": 2000000000,
-                    "release_schedule": "Linear"
-                }
+                "name": format!("vault{}", i)
             }))
             .deposit(NearToken::from_near(5))
             .transact()
@@ -139,26 +121,26 @@ async fn test_factory_pagination() -> Result<(), Box<dyn std::error::Error>> {
     
     // Test pagination
     let first_page = factory
-        .view("get_vaults")
+        .view("get_instances")
         .args_json(json!({
             "from_index": 0,
             "limit": 2
         }))
         .await?;
     
-    let first_page_vaults: Vec<serde_json::Value> = first_page.json()?;
-    assert_eq!(first_page_vaults.len(), 2, "Expected 2 vaults in first page");
+    let first_page_instances: Vec<(String, String)> = first_page.json()?;
+    assert_eq!(first_page_instances.len(), 2, "Expected 2 instances in first page");
     
     let second_page = factory
-        .view("get_vaults")
+        .view("get_instances")
         .args_json(json!({
             "from_index": 2,
             "limit": 2
         }))
         .await?;
     
-    let second_page_vaults: Vec<serde_json::Value> = second_page.json()?;
-    assert_eq!(second_page_vaults.len(), 2, "Expected 2 vaults in second page");
+    let second_page_instances: Vec<(String, String)> = second_page.json()?;
+    assert_eq!(second_page_instances.len(), 2, "Expected 2 instances in second page");
     
     Ok(())
 }
