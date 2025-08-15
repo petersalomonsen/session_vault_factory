@@ -105,15 +105,14 @@ impl Contract {
         log!("Creating session vault instance: {}", instance_account_id);
 
         // Store the instance
-        self.instances
-            .insert(name.clone(), instance_account_id.clone());
+        self.instances.insert(name, instance_account_id.clone());
 
         // Create the sub-account and deploy contract using global hash
         // Using the new use_global_contract method from near-sdk PR #1369
         let code_hash_bytes = hex::decode(SESSION_VAULT_CODE_HASH)
             .unwrap_or_else(|_| env::panic_str("Invalid code hash hex"));
 
-        Promise::new(instance_account_id.clone())
+        Promise::new(instance_account_id)
             .create_account()
             .transfer(attached_deposit)
             .use_global_contract(code_hash_bytes)
@@ -152,7 +151,7 @@ impl Contract {
         SESSION_VAULT_CODE_HASH.to_string()
     }
 
-    pub fn is_global_contract_deployed(&self) -> bool {
+    pub const fn is_global_contract_deployed(&self) -> bool {
         self.global_contract_deployed
     }
 
