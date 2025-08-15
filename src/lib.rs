@@ -4,6 +4,9 @@ use near_sdk::{
 };
 use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
 
+// Hardcoded hash of the session_vault contract for security
+const SESSION_VAULT_CODE_HASH: &str = "f0b9a1ef2b68c7f258178e5e82a68374331e5abd3072aafb938adf010818bd18";
+
 #[derive(BorshDeserialize, BorshSerialize, BorshStorageKey)]
 #[borsh(crate = "near_sdk::borsh")]
 enum StorageKey {
@@ -14,7 +17,6 @@ enum StorageKey {
 pub struct Contract {
     owner_id: AccountId,
     instances: IterableMap<String, AccountId>,
-    session_vault_code_hash: String,
 }
 
 impl Default for Contract {
@@ -26,11 +28,10 @@ impl Default for Contract {
 #[near]
 impl Contract {
     #[init]
-    pub fn new(owner_id: AccountId, session_vault_code_hash: String) -> Self {
+    pub fn new(owner_id: AccountId) -> Self {
         Self {
             owner_id,
             instances: IterableMap::new(StorageKey::Instances),
-            session_vault_code_hash,
         }
     }
 
@@ -64,12 +65,19 @@ impl Contract {
         // Store the instance
         self.instances.insert(name.clone(), instance_account_id.clone());
 
-        // For now, we'll create a sub-account without deploying the actual contract
-        // In a real implementation, we would deploy the session_vault contract here
-        // using the code hash stored in the contract
+        // Create the sub-account and deploy contract
+        // NOTE: Global contract deployment using hash references is available in near-api
+        // but not yet in near-sdk. The pattern would be:
+        // Contract::deploy(instance_account_id)
+        //     .use_global_hash(SESSION_VAULT_CODE_HASH)
+        //     .without_init_call()
+        // 
+        // For now, we create the sub-account. When near-sdk supports global contracts,
+        // we'll deploy using the hardcoded hash reference:
         Promise::new(instance_account_id.clone())
             .create_account()
             .transfer(attached_deposit)
+            // TODO: Add .deploy_from_hash(SESSION_VAULT_CODE_HASH) when near-sdk supports it ( https://github.com/near/near-sdk-rs/pull/1369 )
     }
 
 
@@ -99,7 +107,7 @@ impl Contract {
     }
 
     pub fn get_code_hash(&self) -> String {
-        self.session_vault_code_hash.clone()
+        SESSION_VAULT_CODE_HASH.to_string()
     }
 }
 
@@ -123,10 +131,7 @@ mod tests {
         let context = get_context(false);
         testing_env!(context);
         
-        let contract = Contract::new(
-            accounts(1),
-            "f0b9a1ef2b68c7f258178e5e82a68374331e5abd3072aafb938adf010818bd18".to_string(),
-        );
+        let contract = Contract::new(accounts(1));
         
         assert_eq!(contract.get_owner(), accounts(1));
         assert_eq!(contract.get_total_instances(), 0);
@@ -139,10 +144,7 @@ mod tests {
         context.attached_deposit = NearToken::from_near(1);
         testing_env!(context);
         
-        let mut contract = Contract::new(
-            accounts(1),
-            "test_hash".to_string(),
-        );
+        let mut contract = Contract::new(accounts(1));
         
         contract.create_instance("invalid.name".to_string());
     }
