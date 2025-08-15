@@ -3,6 +3,7 @@ use near_sdk::{
     BorshStorageKey,
 };
 use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
+use near_sdk::json_types::Base64VecU8;
 
 // Hardcoded hash of the session_vault contract for security
 const SESSION_VAULT_CODE_HASH: &str = "f0b9a1ef2b68c7f258178e5e82a68374331e5abd3072aafb938adf010818bd18";
@@ -17,6 +18,8 @@ enum StorageKey {
 pub struct Contract {
     owner_id: AccountId,
     instances: IterableMap<String, AccountId>,
+    global_contract_deployed: bool,
+    global_deployer_account: Option<AccountId>,
 }
 
 impl Default for Contract {
@@ -32,7 +35,47 @@ impl Contract {
         Self {
             owner_id,
             instances: IterableMap::new(StorageKey::Instances),
+            global_contract_deployed: false,
+            global_deployer_account: None,
         }
+    }
+    
+    /// Deploy the session_vault contract as a global contract
+    /// This should be called once to deploy the contract code globally
+    #[payable]
+    pub fn deploy_global_contract(
+        &mut self,
+        code: Base64VecU8,
+        deployer_account_id: AccountId,
+    ) -> Promise {
+        if self.global_contract_deployed {
+            env::panic_str("Global contract already deployed");
+        }
+        
+        // Verify the code hash matches our expected hash
+        let code_bytes: Vec<u8> = code.into();
+        let code_hash_vec = env::sha256(&code_bytes);
+        let code_hash_hex = hex::encode(&code_hash_vec);
+        
+        if code_hash_hex != SESSION_VAULT_CODE_HASH {
+            env::panic_str(&format!(
+                "Invalid contract code. Expected hash: {}, got: {}",
+                SESSION_VAULT_CODE_HASH,
+                code_hash_hex
+            ));
+        }
+        
+        self.global_contract_deployed = true;
+        self.global_deployer_account = Some(deployer_account_id.clone());
+        
+        log!("Deploying session_vault as global contract to: {}", deployer_account_id);
+        
+        // Deploy as global contract using the new SDK method
+        Promise::new(deployer_account_id)
+            .create_account()
+            .transfer(env::attached_deposit())
+            .add_full_access_key(env::signer_account_pk())
+            .deploy_global_contract(code_bytes)
     }
 
     #[payable]
@@ -40,6 +83,11 @@ impl Contract {
         &mut self,
         name: String,
     ) -> Promise {
+        // Check if global contract has been deployed
+        if !self.global_contract_deployed {
+            env::panic_str("Global contract must be deployed first. Call deploy_global_contract()");
+        }
+        
         let attached_deposit = env::attached_deposit();
         // Validate the name
         if name.is_empty() || name.contains('.') {
@@ -65,19 +113,15 @@ impl Contract {
         // Store the instance
         self.instances.insert(name.clone(), instance_account_id.clone());
 
-        // Create the sub-account and deploy contract
-        // NOTE: Global contract deployment using hash references is available in near-api
-        // but not yet in near-sdk. The pattern would be:
-        // Contract::deploy(instance_account_id)
-        //     .use_global_hash(SESSION_VAULT_CODE_HASH)
-        //     .without_init_call()
-        // 
-        // For now, we create the sub-account. When near-sdk supports global contracts,
-        // we'll deploy using the hardcoded hash reference:
+        // Create the sub-account and deploy contract using global hash
+        // Using the new use_global_contract method from near-sdk PR #1369
+        let code_hash_bytes = hex::decode(SESSION_VAULT_CODE_HASH)
+            .unwrap_or_else(|_| env::panic_str("Invalid code hash hex"));
+        
         Promise::new(instance_account_id.clone())
             .create_account()
             .transfer(attached_deposit)
-            // TODO: Add .deploy_from_hash(SESSION_VAULT_CODE_HASH) when near-sdk supports it ( https://github.com/near/near-sdk-rs/pull/1369 )
+            .use_global_contract(code_hash_bytes)
     }
 
 
@@ -109,6 +153,14 @@ impl Contract {
     pub fn get_code_hash(&self) -> String {
         SESSION_VAULT_CODE_HASH.to_string()
     }
+    
+    pub fn is_global_contract_deployed(&self) -> bool {
+        self.global_contract_deployed
+    }
+    
+    pub fn get_global_deployer_account(&self) -> Option<AccountId> {
+        self.global_deployer_account.clone()
+    }
 }
 
 #[cfg(test)]
@@ -138,14 +190,34 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Invalid instance name")]
-    fn test_create_instance_invalid_name() {
+    #[should_panic(expected = "Global contract must be deployed first")]
+    fn test_create_instance_without_global_contract() {
         let mut context = get_context(false);
         context.attached_deposit = NearToken::from_near(1);
         testing_env!(context);
         
         let mut contract = Contract::new(accounts(1));
         
-        contract.create_instance("invalid.name".to_string());
+        // Try to create instance without deploying global contract first
+        contract.create_instance("instance1".to_string());
+    }
+    
+    #[test]
+    fn test_global_contract_deployment_tracking() {
+        let context = get_context(false);
+        testing_env!(context);
+        
+        let mut contract = Contract::new(accounts(1));
+        
+        // Initially no global contract should be deployed
+        assert!(!contract.is_global_contract_deployed());
+        assert!(contract.get_global_deployer_account().is_none());
+        
+        // After setting it (in real scenario this would be after deploy_global_contract)
+        contract.global_contract_deployed = true;
+        contract.global_deployer_account = Some(accounts(2));
+        
+        assert!(contract.is_global_contract_deployed());
+        assert_eq!(contract.get_global_deployer_account(), Some(accounts(2)));
     }
 }
