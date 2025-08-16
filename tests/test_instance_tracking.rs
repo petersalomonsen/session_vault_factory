@@ -61,17 +61,14 @@ async fn test_instance_tracking_with_pagination() -> Result<(), Box<dyn std::err
     println!("✅ Global contract deployed");
 
     // Verify initial state
-    let initial_count = factory
-        .view("get_total_instances")
-        .await?
-        .json::<u64>()?;
+    let initial_count = factory.view("get_total_instances").await?.json::<u64>()?;
     assert_eq!(initial_count, 0, "Should start with 0 instances");
 
     // Create 50 instances
     println!("\n🚀 Creating 50 instances...");
     for i in 0..50 {
         let instance_name = format!("instance{:02}", i);
-        
+
         let result = factory
             .call("create_instance")
             .args_json((instance_name.clone(),))
@@ -81,7 +78,11 @@ async fn test_instance_tracking_with_pagination() -> Result<(), Box<dyn std::err
             .await?;
 
         if !result.is_success() {
-            panic!("Failed to create instance {}: {:?}", instance_name, result.failures());
+            panic!(
+                "Failed to create instance {}: {:?}",
+                instance_name,
+                result.failures()
+            );
         }
 
         if i % 10 == 9 {
@@ -91,16 +92,13 @@ async fn test_instance_tracking_with_pagination() -> Result<(), Box<dyn std::err
     println!("✅ Successfully created all 50 instances");
 
     // Verify total count
-    let total_count = factory
-        .view("get_total_instances")
-        .await?
-        .json::<u64>()?;
+    let total_count = factory.view("get_total_instances").await?.json::<u64>()?;
     assert_eq!(total_count, 50, "Should have exactly 50 instances");
     println!("✅ Total instances count: {}", total_count);
 
     // Test pagination - Get first page (0-9)
     println!("\n📊 Testing pagination...");
-    
+
     let first_page = factory
         .view("get_instances")
         .args_json(serde_json::json!({
@@ -112,16 +110,20 @@ async fn test_instance_tracking_with_pagination() -> Result<(), Box<dyn std::err
 
     assert_eq!(first_page.len(), 10, "First page should have 10 instances");
     println!("✅ First page (0-9): {} instances", first_page.len());
-    
+
     // Verify first page contains correct instances
     for i in 0..10 {
         let expected_name = format!("instance{:02}", i);
-        assert_eq!(first_page[i].0, expected_name, "Instance name mismatch at index {}", i);
+        assert_eq!(
+            first_page[i].0, expected_name,
+            "Instance name mismatch at index {}",
+            i
+        );
         let expected_account = format!("{}.{}", expected_name, factory.id());
         assert_eq!(
-            first_page[i].1.to_string(), 
-            expected_account, 
-            "Instance account mismatch at index {}", 
+            first_page[i].1.to_string(),
+            expected_account,
+            "Instance account mismatch at index {}",
             i
         );
     }
@@ -137,13 +139,22 @@ async fn test_instance_tracking_with_pagination() -> Result<(), Box<dyn std::err
         .await?
         .json::<Vec<(String, near_workspaces::AccountId)>>()?;
 
-    assert_eq!(second_page.len(), 10, "Second page should have 10 instances");
+    assert_eq!(
+        second_page.len(),
+        10,
+        "Second page should have 10 instances"
+    );
     println!("✅ Second page (10-19): {} instances", second_page.len());
 
     // Verify second page contains correct instances
     for i in 0..10 {
         let expected_name = format!("instance{:02}", i + 10);
-        assert_eq!(second_page[i].0, expected_name, "Instance name mismatch at index {}", i + 10);
+        assert_eq!(
+            second_page[i].0,
+            expected_name,
+            "Instance name mismatch at index {}",
+            i + 10
+        );
     }
 
     // Test middle page (25-34)
@@ -156,7 +167,11 @@ async fn test_instance_tracking_with_pagination() -> Result<(), Box<dyn std::err
         .await?
         .json::<Vec<(String, near_workspaces::AccountId)>>()?;
 
-    assert_eq!(middle_page.len(), 10, "Middle page should have 10 instances");
+    assert_eq!(
+        middle_page.len(),
+        10,
+        "Middle page should have 10 instances"
+    );
     println!("✅ Middle page (25-34): {} instances", middle_page.len());
 
     // Test last page (45-49) - should only have 5 instances
@@ -175,7 +190,12 @@ async fn test_instance_tracking_with_pagination() -> Result<(), Box<dyn std::err
     // Verify last page contains correct instances
     for i in 0..5 {
         let expected_name = format!("instance{:02}", i + 45);
-        assert_eq!(last_page[i].0, expected_name, "Instance name mismatch at index {}", i + 45);
+        assert_eq!(
+            last_page[i].0,
+            expected_name,
+            "Instance name mismatch at index {}",
+            i + 45
+        );
     }
 
     // Test getting all instances at once
@@ -201,12 +221,16 @@ async fn test_instance_tracking_with_pagination() -> Result<(), Box<dyn std::err
         .await?
         .json::<Vec<(String, near_workspaces::AccountId)>>()?;
 
-    assert_eq!(beyond_range.len(), 0, "Should return empty for out of range index");
+    assert_eq!(
+        beyond_range.len(),
+        0,
+        "Should return empty for out of range index"
+    );
     println!("✅ Beyond range returns empty list");
 
     // Test individual instance retrieval
     println!("\n🔍 Testing individual instance retrieval...");
-    
+
     // Test first, middle, and last instances
     let test_indices = vec![0, 25, 49];
     for idx in test_indices {
@@ -217,7 +241,11 @@ async fn test_instance_tracking_with_pagination() -> Result<(), Box<dyn std::err
             .await?
             .json::<Option<near_workspaces::AccountId>>()?;
 
-        assert!(instance.is_some(), "Instance {} should exist", instance_name);
+        assert!(
+            instance.is_some(),
+            "Instance {} should exist",
+            instance_name
+        );
         let expected_account = format!("{}.{}", instance_name, factory.id());
         assert_eq!(
             instance.unwrap().to_string(),
@@ -235,7 +263,10 @@ async fn test_instance_tracking_with_pagination() -> Result<(), Box<dyn std::err
         .await?
         .json::<Option<near_workspaces::AccountId>>()?;
 
-    assert!(non_existent.is_none(), "Non-existent instance should return None");
+    assert!(
+        non_existent.is_none(),
+        "Non-existent instance should return None"
+    );
     println!("✅ Non-existent instance returns None");
 
     println!("\n=== Summary ===");
@@ -316,7 +347,11 @@ async fn test_pagination_edge_cases() -> Result<(), Box<dyn std::error::Error>> 
         .await?
         .json::<Vec<(String, near_workspaces::AccountId)>>()?;
 
-    assert_eq!(large_limit.len(), 3, "Large limit should return all instances");
+    assert_eq!(
+        large_limit.len(),
+        3,
+        "Large limit should return all instances"
+    );
     println!("✅ Large limit returns all available instances");
 
     // Test with from_index = total_instances
@@ -342,7 +377,11 @@ async fn test_pagination_edge_cases() -> Result<(), Box<dyn std::error::Error>> 
         .await?
         .json::<Vec<(String, near_workspaces::AccountId)>>()?;
 
-    assert_eq!(default_params.len(), 3, "Default params should return all instances");
+    assert_eq!(
+        default_params.len(),
+        3,
+        "Default params should return all instances"
+    );
     println!("✅ Default parameters work correctly");
 
     println!("\n✅ All pagination edge cases handled correctly!");
