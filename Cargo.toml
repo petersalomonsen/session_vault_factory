@@ -36,12 +36,12 @@ container_build_command = [
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-near-sdk = { git = "https://github.com/near/near-sdk-rs", branch = "global-contracts", features = ["global-contracts"] }
+near-sdk = { version = "5.17.0", features = ["global-contracts"] }
 hex = "0.4"
 
 [dev-dependencies]
-near-sdk = { git = "https://github.com/near/near-sdk-rs", branch = "global-contracts", features = ["unit-testing", "global-contracts"] }
-near-workspaces = { version = "0.20", features = ["unstable"] }
+near-sdk = { version = "5.17.0", features = ["unit-testing", "global-contracts"] }
+near-workspaces = { version = "0.21", features = ["unstable"] }
 tokio = { version = "1.12.0", features = ["full"] }
 serde_json = "1"
 reqwest = { version = "0.11", features = ["blocking"] }
@@ -57,10 +57,3 @@ panic = "abort"
 # Opt into extra safety checks on arithmetic operations https://stackoverflow.com/a/64136471/249801
 overflow-checks = true
 
-[patch.crates-io]
-# TODO: Remove this when we get a new version of near-workspaces-rs
-near-primitives = { git = "https://github.com/near/nearcore.git", branch = "jsonrpc-v32" }
-near-crypto = { git = "https://github.com/near/nearcore.git", branch = "jsonrpc-v32" }
-near-chain-configs = { git = "https://github.com/near/nearcore.git", branch = "jsonrpc-v32" }
-near-jsonrpc-primitives = { git = "https://github.com/near/nearcore.git", branch = "jsonrpc-v32" }
-near-jsonrpc-client = { git = "https://github.com/near/near-jsonrpc-client-rs.git", branch = "jsonrpc-v32" }
