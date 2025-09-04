@@ -108,6 +108,12 @@ near contract call-function as-transaction $FACTORY_ACCOUNT new \
 base64 -i session_vault.wasm | tr -d '\n' > session_vault.base64
 
 # Deploy as global contract (requires ~20 NEAR deposit)
+# Storage cost calculation:
+# - NEAR charges 1 NEAR per 10 KB of storage
+# - session_vault.wasm is ~156 KB
+# - 156 KB ÷ 10 KB = 15.6 NEAR for contract storage
+# - Plus ~2 NEAR for account creation and metadata
+# - Total: ~17.56 NEAR minimum (we use 20 NEAR for safety margin)
 CODE_BASE64=$(cat session_vault.base64)
 near contract call-function as-transaction $FACTORY_ACCOUNT deploy_global_contract \
   json-args "{\"code\":\"$CODE_BASE64\",\"deployer_account_id\":\"global.$FACTORY_ACCOUNT\"}" \
