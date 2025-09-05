@@ -71,7 +71,11 @@ async fn test_instance_tracking_with_pagination() -> Result<(), Box<dyn std::err
 
         let result = factory
             .call("create_instance")
-            .args_json((instance_name.clone(),))
+            .args_json((
+                instance_name.clone(),
+                factory.id().to_string(),
+                "test_token.test.near".to_string(),
+            ))
             .deposit(NearToken::from_near(1))
             .max_gas()
             .transact()
@@ -316,7 +320,11 @@ async fn test_pagination_edge_cases() -> Result<(), Box<dyn std::error::Error>> 
     for i in 0..3 {
         factory
             .call("create_instance")
-            .args_json((format!("test{}", i),))
+            .args_json((
+                format!("test{}", i),
+                factory.id().to_string(),
+                "test_token.test.near".to_string(),
+            ))
             .deposit(NearToken::from_near(1))
             .max_gas()
             .transact()

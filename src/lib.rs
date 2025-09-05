@@ -1,6 +1,8 @@
 use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::Base64VecU8;
-use near_sdk::{env, log, near, store::IterableMap, AccountId, BorshStorageKey, Promise};
+use near_sdk::{
+    env, log, near, store::IterableMap, AccountId, BorshStorageKey, Gas, NearToken, Promise,
+};
 
 // Hardcoded hash of the session_vault contract for security
 const SESSION_VAULT_CODE_HASH: &str =
@@ -79,7 +81,12 @@ impl Contract {
     }
 
     #[payable]
-    pub fn create_instance(&mut self, name: String) -> Promise {
+    pub fn create_instance(
+        &mut self,
+        name: String,
+        owner_id: AccountId,
+        token_id: AccountId,
+    ) -> Promise {
         // Check if global contract has been deployed
         if !self.global_contract_deployed {
             env::panic_str("Global contract must be deployed first. Call deploy_global_contract()");
@@ -102,7 +109,10 @@ impl Contract {
             env::panic_str(&format!("Instance '{}' already exists", name));
         }
 
-        log!("Creating session vault instance: {}", instance_account_id);
+        log!(
+            "Creating and initializing session vault instance: {}",
+            instance_account_id
+        );
 
         // Store the instance
         self.instances.insert(name, instance_account_id.clone());
@@ -112,10 +122,26 @@ impl Contract {
         let code_hash_bytes = hex::decode(SESSION_VAULT_CODE_HASH)
             .unwrap_or_else(|_| env::panic_str("Invalid code hash hex"));
 
-        Promise::new(instance_account_id)
+        // Split the deposit: most for account creation, some for initialization gas
+        let account_creation_deposit =
+            attached_deposit.saturating_sub(NearToken::from_millinear(50));
+
+        Promise::new(instance_account_id.clone())
             .create_account()
-            .transfer(attached_deposit)
+            .transfer(account_creation_deposit)
             .use_global_contract(code_hash_bytes)
+            .then(
+                Promise::new(instance_account_id).function_call(
+                    "new".to_string(),
+                    near_sdk::serde_json::to_vec(&near_sdk::serde_json::json!({
+                        "owner_id": owner_id,
+                        "token_id": token_id
+                    }))
+                    .unwrap(),
+                    NearToken::from_yoctonear(0),
+                    Gas::from_tgas(30),
+                ),
+            )
     }
 
     // View methods
@@ -196,7 +222,7 @@ mod tests {
         let mut contract = Contract::new(accounts(1));
 
         // Try to create instance without deploying global contract first
-        contract.create_instance("instance1".to_string());
+        contract.create_instance("instance1".to_string(), accounts(1), accounts(2));
     }
 
     #[test]

@@ -104,12 +104,19 @@ async fn test_native_global_contract_deployment() -> Result<(), Box<dyn std::err
     assert!(is_deployed, "Global contract should be marked as deployed");
     println!("✅ Factory confirms global contract is deployed");
 
-    // Step 2: Create an instance using the global contract
-    println!("\n🚀 Creating instance using global contract...");
+    // Step 2: Create and initialize an instance using the global contract
+    println!("\n🚀 Creating and initializing instance using global contract...");
+
+    let instance_owner = factory.id(); // Use factory as owner for testing
+    let token_id = "test_token.test.near";
 
     let instance_result = factory
         .call("create_instance")
-        .args_json(("instance1",))
+        .args_json((
+            "instance1",
+            instance_owner.to_string(),
+            token_id.to_string(),
+        ))
         .deposit(NearToken::from_near(5))
         .max_gas()
         .transact()
@@ -147,80 +154,48 @@ async fn test_native_global_contract_deployment() -> Result<(), Box<dyn std::err
                 let saved = session_vault_code.len() as u64 - account_view.storage_usage;
                 println!("   ✅ Storage saved: ~{} bytes", saved);
 
-                // Step 3: Initialize the session_vault contract
-                println!("\n📝 Initializing session_vault contract...");
+                // Step 3: Verify the session_vault contract is initialized by calling contract_metadata
+                println!("\n📊 Verifying session_vault initialization...");
 
-                let instance_account = worker.dev_create_account().await?;
-                let instance_account_id: near_workspaces::AccountId = instance_id.parse()?;
-                let init_result = instance_account
-                    .call(&instance_account_id, "new")
-                    .args_json((
-                        instance_id.clone(),                // owner
-                        "test_token.test.near".to_string(), // token account
-                    ))
-                    .max_gas()
-                    .transact()
+                let metadata_result = worker
+                    .view(&instance_id.parse()?, "contract_metadata")
                     .await;
 
-                match init_result {
-                    Ok(init_outcome) => {
-                        if init_outcome.is_success() {
-                            println!("✅ Successfully initialized session_vault contract!");
-                            println!("   Gas burnt: {}", init_outcome.total_gas_burnt);
+                match metadata_result {
+                    Ok(metadata_view) => {
+                        let metadata_str = String::from_utf8(metadata_view.result.clone())
+                            .unwrap_or_else(|_| "Invalid UTF-8".to_string());
+                        println!("   Raw metadata: {}", metadata_str);
 
-                            // Step 4: Call contract_metadata to verify it's working
-                            println!("\n📊 Calling contract_metadata...");
+                        // Parse and verify the metadata
+                        let metadata: serde_json::Value =
+                            serde_json::from_slice(&metadata_view.result)?;
 
-                            let metadata_result = worker
-                                .view(&instance_id.parse()?, "contract_metadata")
-                                .await;
+                        println!("\n✅ Contract metadata verification:");
+                        println!("   Owner ID: {}", metadata["owner_id"]);
+                        println!("   Token Account: {}", metadata["token_account_id"]);
+                        println!("   Version: {}", metadata["version"]);
+                        println!("   Total Balance: {}", metadata["total_balance"]);
+                        println!("   Claimed Balance: {}", metadata["claimed_balance"]);
 
-                            match metadata_result {
-                                Ok(metadata_view) => {
-                                    let metadata_str =
-                                        String::from_utf8(metadata_view.result.clone())
-                                            .unwrap_or_else(|_| "Invalid UTF-8".to_string());
-                                    println!("   Raw metadata: {}", metadata_str);
-
-                                    // Parse and verify the metadata
-                                    let metadata: serde_json::Value =
-                                        serde_json::from_slice(&metadata_view.result)?;
-
-                                    println!("\n✅ Contract metadata verification:");
-                                    println!("   Owner ID: {}", metadata["owner_id"]);
-                                    println!("   Token Account: {}", metadata["token_account_id"]);
-                                    println!("   Version: {}", metadata["version"]);
-                                    println!("   Total Balance: {}", metadata["total_balance"]);
-                                    println!("   Claimed Balance: {}", metadata["claimed_balance"]);
-
-                                    // Assert expected values
-                                    assert_eq!(
-                                        metadata["owner_id"], instance_id,
-                                        "Owner should match the instance account"
-                                    );
-                                    assert_eq!(
-                                        metadata["token_account_id"], "test_token.test.near",
-                                        "Token account should match what we initialized"
-                                    );
-                                    assert_eq!(
-                                        metadata["version"], "1.0.0",
-                                        "Contract version should be 1.0.0"
-                                    );
-                                }
-                                Err(e) => {
-                                    println!("⚠️  Could not call contract_metadata: {}", e);
-                                    println!("   This may indicate the contract wasn't properly initialized");
-                                }
-                            }
-                        } else {
-                            println!(
-                                "⚠️  Contract initialization failed: {:?}",
-                                init_outcome.failures()
-                            );
-                        }
+                        // Assert expected values
+                        assert_eq!(
+                            metadata["owner_id"],
+                            instance_owner.to_string(),
+                            "Owner should match what was passed to create_instance"
+                        );
+                        assert_eq!(
+                            metadata["token_account_id"], token_id,
+                            "Token account should match what was passed to create_instance"
+                        );
+                        assert_eq!(
+                            metadata["version"], "1.0.0",
+                            "Contract version should be 1.0.0"
+                        );
                     }
                     Err(e) => {
-                        println!("⚠️  Failed to initialize contract: {}", e);
+                        println!("⚠️  Could not call contract_metadata: {}", e);
+                        println!("   This may indicate the contract wasn't properly initialized");
                     }
                 }
             } else {

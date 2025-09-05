@@ -132,45 +132,38 @@ near contract call-function as-read-only $FACTORY_ACCOUNT \
   network-config testnet now
 ```
 
-### Creating and Initializing Session Vault Instances
+### Creating Session Vault Instances
 
-#### Step 1: Create Instance
-Once the factory is deployed and the global contract is registered, you can create session vault instances:
+Once the factory is deployed and the global contract is registered, you can create and initialize session vault instances in a single step:
 
 ```bash
-# Create a new session vault instance
+# Create and initialize a new session vault instance
 INSTANCE_NAME="vault1"
+OWNER_ID="$FACTORY_ACCOUNT"  # The account that will manage the vault
+TOKEN_ID="your-token.testnet"  # The FT token this vault will manage
+
 near contract call-function as-transaction $FACTORY_ACCOUNT create_instance \
-  json-args "{\"name\":\"$INSTANCE_NAME\"}" \
+  json-args "{\"name\":\"$INSTANCE_NAME\",\"owner_id\":\"$OWNER_ID\",\"token_id\":\"$TOKEN_ID\"}" \
   prepaid-gas '100.0 Tgas' attached-deposit '3 NEAR' \
   sign-as $FACTORY_ACCOUNT network-config testnet sign-with-keychain send
 ```
 
-This will create a new session vault at: `$INSTANCE_NAME.$FACTORY_ACCOUNT`
+This will:
+1. Create a new session vault at: `$INSTANCE_NAME.$FACTORY_ACCOUNT`
+2. Initialize it with the specified owner and token configuration
 
-#### Step 2: Initialize the Instance
-The session vault instance must be initialized after creation:
-
-```bash
-# Initialize the vault instance
-VAULT_INSTANCE="$INSTANCE_NAME.$FACTORY_ACCOUNT"
-TOKEN_ID="your-token.testnet"  # The FT token this vault will manage
-
-near contract call-function as-transaction $VAULT_INSTANCE new \
-  json-args "{\"owner_id\":\"$FACTORY_ACCOUNT\",\"token_id\":\"$TOKEN_ID\"}" \
-  prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' \
-  sign-as $FACTORY_ACCOUNT network-config testnet sign-with-keychain send
-```
-
-**Note**: The `new` method does not accept any deposit. The initialization parameters are:
+**Parameters**:
+- `name`: The instance name (will become a sub-account of the factory)
 - `owner_id`: The account that will manage the vault (typically the factory or your admin account)
 - `token_id`: The fungible token contract ID that this vault will handle
 
-#### Step 3: Verify the Instance
-Check that the instance is properly initialized:
+### Verifying the Instance
+
+Check that the instance is properly created and initialized:
 
 ```bash
 # Get vault metadata
+VAULT_INSTANCE="$INSTANCE_NAME.$FACTORY_ACCOUNT"
 near contract call-function as-read-only $VAULT_INSTANCE contract_metadata \
   json-args '{}' network-config testnet now
 ```
