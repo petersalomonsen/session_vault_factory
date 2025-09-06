@@ -142,9 +142,12 @@ INSTANCE_NAME="vault1"
 OWNER_ID="$FACTORY_ACCOUNT"  # The account that will manage the vault
 TOKEN_ID="your-token.testnet"  # The FT token this vault will manage
 
+# Note: Due to storage bug, deposit must match expected user count:
+# - 50 users: 0.17 NEAR
+# - 100 users: 0.30 NEAR
 near contract call-function as-transaction $FACTORY_ACCOUNT create_instance \
   json-args "{\"name\":\"$INSTANCE_NAME\",\"owner_id\":\"$OWNER_ID\",\"token_id\":\"$TOKEN_ID\"}" \
-  prepaid-gas '100.0 Tgas' attached-deposit '3 NEAR' \
+  prepaid-gas '100.0 Tgas' attached-deposit '0.17 NEAR' \
   sign-as $FACTORY_ACCOUNT network-config testnet sign-with-keychain send
 ```
 
@@ -157,25 +160,46 @@ This will:
 - `owner_id`: The account that will manage the vault (typically the factory or your admin account)
 - `token_id`: The fungible token contract ID that this vault will handle
 
-### Storage Requirements for Session Vault Users
+### Storage Requirements for Factory-Deployed Vaults
 
-Based on testing, here are the storage requirements for session vault instances:
+When deploying vaults through the factory with global contracts, storage costs are dramatically reduced:
 
-#### Storage per User
-- **Each user account requires ~234 bytes of storage**
-- **Storage cost: ~0.0023 NEAR per user** (at 0.00001 NEAR per byte)
+#### Storage Breakdown
+- **Base instance storage**: 320 bytes (132-byte contract reference + vault state)
+- **Per user storage**: 234 bytes (~0.00234 NEAR per user)
+- **Savings per instance**: ~171KB (99.8% reduction vs traditional deployment)
 
-#### Recommended Deposit Amounts
+#### Minimum Deposit Requirements (Tested and Verified)
 
-| Number of Users | Base Deposit | User Storage | Total Recommended |
-|-----------------|--------------|--------------|-------------------|
-| 10 users        | 2 NEAR       | 0.024 NEAR   | **3 NEAR**        |
-| 25 users        | 2 NEAR       | 0.059 NEAR   | **3 NEAR**        |
-| 50 users        | 2 NEAR       | 0.117 NEAR   | **3 NEAR**        |
-| 100 users       | 2 NEAR       | 0.234 NEAR   | **3 NEAR**        |
-| 200 users       | 2 NEAR       | 0.468 NEAR   | **3 NEAR**        |
+| Component | Minimum Amount | Notes |
+|-----------|---------------|-------|
+| **Per User (add_account)** | **0.003 NEAR** | Minimum to cover 234 bytes storage. Excess is automatically refunded |
 
-**Note**: The 3 NEAR deposit recommendation includes a safety buffer. The actual minimum for 50 users is ~2.12 NEAR.
+#### Instance Creation Deposit Requirements
+
+⚠️ **Important**: Due to a bug in the session_vault's storage management, the instance creation deposit must be sufficient for the total number of users you plan to add. The vault's `internal_check_storage` function incorrectly refunds most of the per-user deposits instead of keeping enough to maintain the account's minimum balance.
+
+| Number of Users | Required Instance Deposit | Notes |
+|-----------------|--------------------------|-------|
+| 50 users        | **0.17 NEAR**           | Tested minimum |
+| 100 users       | **0.30 NEAR**           | Tested minimum |
+| 200 users       | **~0.50 NEAR**          | Estimated |
+
+**The Storage Bug**: The vault only keeps the exact storage cost (~0.00234 NEAR per user) from each `add_account` deposit and refunds the rest. It doesn't account for NEAR's minimum balance requirement which grows with storage usage. This means:
+- Per-user deposits don't build up the vault's balance as intended
+- The initial instance deposit must cover the entire minimum balance requirement
+- Alternative: You can send additional NEAR directly to the vault instance after creation
+
+#### Cost Examples (with current bug)
+
+| Number of Users | Instance Deposit | User Deposits | Total Cost | Actual Cost After Refunds |
+|-----------------|------------------|---------------|------------|---------------------------|
+| 50 users        | 0.17 NEAR       | 50 × 0.003 = 0.15 NEAR  | 0.32 NEAR | ~0.19 NEAR (most refunded) |
+| 100 users       | 0.30 NEAR       | 100 × 0.003 = 0.30 NEAR | 0.60 NEAR | ~0.33 NEAR (most refunded) |
+
+**Refund Mechanism**: The `add_account` function automatically refunds excess deposits, but due to the bug, it refunds too much - keeping only ~0.00234 NEAR per user instead of keeping enough to maintain the account's minimum balance.
+
+**Why so efficient?** With global contracts, each instance only stores a 132-byte reference to the contract code instead of the full 156KB WASM binary. This results in 99.8% storage savings per instance.
 
 #### Adding Users to a Vault
 
@@ -194,7 +218,7 @@ near contract call-function as-transaction $VAULT_INSTANCE add_account \
     \"session_num\":12,
     \"release_per_session\":\"1000000000000000000000000\"
   }" \
-  prepaid-gas '30.0 Tgas' attached-deposit '0.005 NEAR' \
+  prepaid-gas '30.0 Tgas' attached-deposit '0.003 NEAR' \
   sign-as $OWNER_ID network-config testnet sign-with-keychain send
 ```
 
