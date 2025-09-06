@@ -157,6 +157,54 @@ This will:
 - `owner_id`: The account that will manage the vault (typically the factory or your admin account)
 - `token_id`: The fungible token contract ID that this vault will handle
 
+### Storage Requirements for Session Vault Users
+
+Based on testing, here are the storage requirements for session vault instances:
+
+#### Storage per User
+- **Each user account requires ~234 bytes of storage**
+- **Storage cost: ~0.0023 NEAR per user** (at 0.00001 NEAR per byte)
+
+#### Recommended Deposit Amounts
+
+| Number of Users | Base Deposit | User Storage | Total Recommended |
+|-----------------|--------------|--------------|-------------------|
+| 10 users        | 2 NEAR       | 0.024 NEAR   | **3 NEAR**        |
+| 25 users        | 2 NEAR       | 0.059 NEAR   | **3 NEAR**        |
+| 50 users        | 2 NEAR       | 0.117 NEAR   | **3 NEAR**        |
+| 100 users       | 2 NEAR       | 0.234 NEAR   | **3 NEAR**        |
+| 200 users       | 2 NEAR       | 0.468 NEAR   | **3 NEAR**        |
+
+**Note**: The 3 NEAR deposit recommendation includes a safety buffer. The actual minimum for 50 users is ~2.12 NEAR.
+
+#### Adding Users to a Vault
+
+When adding users to a session vault, each `add_account` call requires a storage deposit:
+
+```bash
+# Add a user with vesting schedule
+VAULT_INSTANCE="vault1.session-factory-1757014869.testnet"
+USER_ID="alice.testnet"
+
+near contract call-function as-transaction $VAULT_INSTANCE add_account \
+  json-args "{
+    \"account_id\":\"$USER_ID\",
+    \"start_timestamp\":\"1700000000\",
+    \"session_interval\":\"2592000\",
+    \"session_num\":12,
+    \"release_per_session\":\"1000000000000000000000000\"
+  }" \
+  prepaid-gas '30.0 Tgas' attached-deposit '0.005 NEAR' \
+  sign-as $OWNER_ID network-config testnet sign-with-keychain send
+```
+
+**Parameters for add_account**:
+- `account_id`: The user's NEAR account
+- `start_timestamp`: Unix timestamp when vesting starts (as string)
+- `session_interval`: Duration of each vesting period in seconds (as string, e.g., "2592000" for 30 days)
+- `session_num`: Number of vesting periods (as number)
+- `release_per_session`: Amount to release per period in yoctoNEAR (as string)
+
 ### Verifying the Instance
 
 Check that the instance is properly created and initialized:
